@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSE 实时进度演示</title>
+</head>
+<body>
+    <h2>任务进度：</h2>
+    <div id="progress">0%</div>
+    <div id="output"></div>
+    <button id="restartBtn" style="display:none;">重新开始</button>
+
+    <script>
+        const outputDiv = document.getElementById('output');
+        const progressDiv = document.getElementById('progress');
+        const restartBtn = document.getElementById('restartBtn');
+        let eventSource;
+
+        function connectSSE() {
+            // 1. 创建 EventSource 连接
+            eventSource = new EventSource('http://localhost:5000/sse-stream');
+
+            // 2. 监听自定义事件（任务更新）
+            eventSource.addEventListener('update', (event) => {
+                const data = JSON.parse(event.data);
+                outputDiv.innerHTML += data.text + "<br>";
+                progressDiv.innerText = `${data.progress}%`;
+            });
+
+            // 3. 监听结束事件
+            eventSource.addEventListener('end', () => {
+                outputDiv.innerHTML += "<b>任务结束</b>";
+                eventSource.close();  // 主动关闭连接
+                restartBtn.style.display = 'block';
+            });
+
+            // 4. 错误处理（自动重连由 retry 字段控制）
+            eventSource.onerror = (err) => {
+                console.error("SSE 错误:", err);
+                outputDiv.innerHTML += "<b style='color:red'>连接断开，尝试重连中...</b><br>";
+                // 注意：浏览器会根据 retry 字段自动重连，无需手动处理
+            };
+        }
+
+        // 初始化连接
+        connectSSE();
+
+        // 重新开始按钮事件
+        restartBtn.onclick = () => {
+            // 清空内容
+            outputDiv.innerHTML = "";
+            progressDiv.innerText = "0%";
+            restartBtn.style.display = 'none';
+            
+            // 重新连接
+            connectSSE();
+        };
+    </script>
+</body>
+</html>

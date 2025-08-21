@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>流式传输 vs 一次性传输</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { margin-bottom: 30px; }
+        .result { 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            min-height: 100px;
+            background-color: #f9f9f9;
+        }
+        button { 
+            padding: 10px 20px; 
+            margin: 5px; 
+            cursor: pointer;
+        }
+        .progress { height: 20px; background: #eee; margin: 10px 0; }
+        .progress-bar { height: 100%; background: #4caf50; width: 0%; }
+    </style>
+</head>
+<body>
+    <h1>流式传输 vs 一次性传输对比</h1>
+    
+    <!-- 一次性传输 -->
+    <div class="container">
+        <h2>一次性传输</h2>
+        <button onclick="fetchTraditional()">开始传统请求</button>
+        <div class="result" id="traditionalResult">
+            点击按钮开始请求，5秒后一次性显示所有结果
+        </div>
+    </div>
+    
+    <!-- 流式传输 -->
+    <div class="container">
+        <h2>流式传输</h2>
+        <button onclick="fetchStreaming()">开始流式请求</button>
+        <div class="progress">
+            <div class="progress-bar" id="streamingProgress"></div>
+        </div>
+        <div class="result" id="streamingResult">
+            点击按钮开始请求，逐步显示结果
+        </div>
+    </div>
+    
+    <!-- SSE流式传输 -->
+    <div class="container">
+        <h2>SSE流式传输</h2>
+        <button onclick="fetchSSE()">开始SSE请求</button>
+        <div class="progress">
+            <div class="progress-bar" id="sseProgress"></div>
+        </div>
+        <div class="result" id="sseResult">
+            点击按钮开始SSE请求，逐步显示结果
+        </div>
+    </div>
+
+    <script>
+        // 传统方式
+        function fetchTraditional() {
+            const resultDiv = document.getElementById('traditionalResult');
+            resultDiv.innerHTML = '请求中...请等待5秒';
+            
+            fetch('http://localhost:5001/traditional')
+                .then(response => response.json())
+                .then(data => {
+                    resultDiv.innerHTML = '';
+                    data.results.forEach(step => {
+                        resultDiv.innerHTML += step + '<br>';
+                    });
+                    resultDiv.innerHTML += '<b>全部完成!</b>';
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = '错误: ' + error;
+                });
+        }
+        
+        // 流式传输
+        function fetchStreaming() {
+            const resultDiv = document.getElementById('streamingResult');
+            const progressBar = document.getElementById('streamingProgress');
+            resultDiv.innerHTML = '';
+            progressBar.style.width = '0%';
+            
+            fetch('http://localhost:5001/streaming')
+                .then(response => {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    
+                    function read() {
+                        reader.read().then(({ done, value }) => {
+                            if (done) {
+                                resultDiv.innerHTML += '<b>全部完成!</b>';
+                                return;
+                            }
+                            
+                            const text = decoder.decode(value);
+                            const lines = text.split('\n');
+                            
+                            lines.forEach(line => {
+                                if (line.startsWith('data: ')) {
+                                    const data = JSON.parse(line.substring(6));
+                                    resultDiv.innerHTML += data.step + '<br>';
+                                    progressBar.style.width = data.progress + '%';
+                                }
+                            });
+                            
+                            read();
+                        });
+                    }
+                    
+                    read();
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = '错误: ' + error;
+                });
+        }
+        
+        // SSE方式
+        function fetchSSE() {
+            const resultDiv = document.getElementById('sseResult');
+            const progressBar = document.getElementById('sseProgress');
+            resultDiv.innerHTML = '';
+            progressBar.style.width = '0%';
+            
+            const eventSource = new EventSource('http://localhost:5001/sse');
+            
+            eventSource.addEventListener('update', (event) => {
+                const data = JSON.parse(event.data);
+                resultDiv.innerHTML += data.step + '<br>';
+                progressBar.style.width = data.progress + '%';
+            });
+            
+            eventSource.addEventListener('end', () => {
+                resultDiv.innerHTML += '<b>全部完成!</b>';
+                eventSource.close();
+            });
+            
+            eventSource.onerror = (err) => {
+                resultDiv.innerHTML += '<b style="color:red">连接错误</b><br>';
+            };
+        }
+    </script>
+</body>
+</html>
